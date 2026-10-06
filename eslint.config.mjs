@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local app data: ingested repository working copies and test fixtures.
+    ".data/**",
   ]),
 ]);
 

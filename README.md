@@ -18,6 +18,31 @@ From a clean clone:
 Production: `npm run build && npm start`.
 Or: `bash start.sh`
 
+## Using it
+
+Open the dashboard and **Add repository**: paste a remote URL (deep clone) or upload a zip
+containing the repo's `.git` (archive root or one folder down). Ingestion runs in the
+background — the status badge flips to ready with commit/author counts when done.
+Then filter by **author** (dropdown), **file or directory** (click rows in the Directory
+tab or the breadcrumb to drill in), and **commits** (a committer-date `from`/`to` range,
+half-open `[from, to)`, or tick individual commits in the Commits tab for a manual set —
+a manual selection replaces the date range). Summary cards and all tables recompute for
+the selected scope: added/removed/growth/churn, modifications (commits with any change),
+modification frequency (modifications ÷ |H|), churn rate (churn ÷ |H|) and per-author
+ownership (author churn ÷ total churn).
+
+### API
+
+- `GET /api/repos` — list repositories with statuses and counts.
+- `POST /api/repos` — JSON `{ "url": "https://…" }` or multipart `file=<zip>`; returns
+  `{ "id" }` immediately, ingestion continues in the background.
+- `GET /api/repos/[id]` — one repository (status polling).
+- `GET /api/repos/[id]/authors` — all authors, for the filter dropdown.
+- `GET /api/repos/[id]/metrics` — metrics for a commit set. Query parameters:
+  `authorId`, `path` (a directory or a file; default root), `from`/`to` (ISO committer
+  dates, half-open), or `commits` (comma-separated hashes, replaces the date range).
+  Returns the summary, immediate children, per-author metrics and the commit list.
+
 ## Third-party code   (package — one-line reason)
 
 - next — App Router framework (scaffold)

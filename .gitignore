@@ -41,5 +41,5 @@ yarn-error.log*
 next-env.d.ts
 
 # app local data (dev database + ingested repositories)
-/dev.db
+/dev.db*
 /.data/

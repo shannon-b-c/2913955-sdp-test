@@ -8,6 +8,7 @@ import { streamRepoHistory } from "./git";
 const execFileAsync = promisify(execFile);
 
 export const REPOS_DIR = path.join(process.cwd(), ".data", "repos");
+export const UPLOADS_DIR = path.join(process.cwd(), ".data", "uploads");
 
 export type IngestSource =
   | { kind: "remote"; url: string }
@@ -16,6 +17,8 @@ export type IngestSource =
 export type IngestOptions = {
   /** Display name; derived from the URL / file name when omitted. */
   name?: string;
+  /** Display value for `source_url`; derived from the source when omitted. */
+  sourceUrl?: string;
   /** Where to place the cloned/extracted repository (tests use throwaways). */
   reposDir?: string;
   /** Timeout for `git clone` / zip extraction in milliseconds. */
@@ -24,12 +27,40 @@ export type IngestOptions = {
 
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 
-function deriveName(source: IngestSource): string {
+export function deriveName(source: IngestSource): string {
   if (source.kind === "zip") {
     return path.basename(source.zipPath).replace(/\.zip$/i, "");
   }
   const trimmed = source.url.replace(/\/+$/, "").replace(/\.git$/i, "");
   return trimmed.split("/").pop() || trimmed || source.url;
+}
+
+function sourceUrl(source: IngestSource, override?: string): string {
+  if (override) return override;
+  if (source.kind === "zip") return path.basename(source.zipPath);
+  return source.url;
+}
+
+/**
+ * Inserts the pending repositories row up front so callers (the API) can
+ * respond with the id and poll while ingestion runs in the background.
+ */
+export function createRepository(
+  db: Db,
+  source: IngestSource,
+  opts: IngestOptions = {},
+): number {
+  const info = db
+    .prepare(
+      "INSERT INTO repositories (name, source_type, source_url, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+    )
+    .run(
+      opts.name ?? deriveName(source),
+      source.kind,
+      sourceUrl(source, opts.sourceUrl),
+      new Date().toISOString(),
+    );
+  return Number(info.lastInsertRowid);
 }
 
 /**
@@ -60,29 +91,17 @@ export function locateGitRoot(extractedDir: string): string {
 }
 
 /**
- * Ingests a repository from a deep-cloned remote URL or a zip upload.
- * Creates the repositories row up front, moves it through
- * pending → ingesting → ready, and marks it failed (with the error) if
- * anything goes wrong. Resolves to the new repository id.
+ * Performs the actual work for a repositories row created by
+ * `createRepository`: moves it pending → ingesting → ready, or marks it
+ * failed (with the error) and rethrows on any problem.
  */
-export async function ingestRepository(
+export async function ingestInto(
   db: Db,
+  repoId: number,
   source: IngestSource,
   opts: IngestOptions = {},
-): Promise<number> {
-  const now = new Date().toISOString();
+): Promise<void> {
   const reposDir = opts.reposDir ?? REPOS_DIR;
-  const info = db
-    .prepare(
-      "INSERT INTO repositories (name, source_type, source_url, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-    )
-    .run(
-      opts.name ?? deriveName(source),
-      source.kind,
-      source.kind === "remote" ? source.url : path.basename(source.zipPath),
-      now,
-    );
-  const repoId = Number(info.lastInsertRowid);
   const repoDir = path.join(reposDir, String(repoId));
   const markFailed = db.prepare(
     "UPDATE repositories SET status = 'failed', error = ? WHERE id = ?",
@@ -120,11 +139,36 @@ export async function ingestRepository(
     db.prepare(
       "UPDATE repositories SET status = 'ready', head_hash = ?, ingested_at = ? WHERE id = ?",
     ).run(head, new Date().toISOString(), repoId);
-    return repoId;
   } catch (err) {
     markFailed.run(err instanceof Error ? err.message : String(err), repoId);
     throw err;
   }
+}
+
+/** Creates the row, ingests, and resolves with the new repository id. */
+export async function ingestRepository(
+  db: Db,
+  source: IngestSource,
+  opts: IngestOptions = {},
+): Promise<number> {
+  const repoId = createRepository(db, source, opts);
+  await ingestInto(db, repoId, source, opts);
+  return repoId;
+}
+
+/**
+ * Creates the row and starts ingestion without waiting for it; resolves the
+ * id immediately. The returned promise never rejects — failures are recorded
+ * on the repositories row (status `failed` + `error`) for status polling.
+ */
+export function startIngestion(
+  db: Db,
+  source: IngestSource,
+  opts: IngestOptions = {},
+): { id: number; done: Promise<void> } {
+  const id = createRepository(db, source, opts);
+  const done = ingestInto(db, id, source, opts).catch(() => {});
+  return { id, done };
 }
 
 /**

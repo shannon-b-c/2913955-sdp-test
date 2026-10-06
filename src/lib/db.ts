@@ -72,3 +72,13 @@ export function openDatabase(dbPath: string = DEFAULT_DB_PATH): Db {
   migrate(db);
   return db;
 }
+
+// One database connection per server process, shared across route handlers
+// (survives dev-mode module reloads via globalThis).
+const globalStore = globalThis as unknown as { __ratDb?: Db };
+
+/** Server-side singleton for API route handlers. Never import from client code. */
+export function getDb(): Db {
+  if (!globalStore.__ratDb) globalStore.__ratDb = openDatabase();
+  return globalStore.__ratDb;
+}
