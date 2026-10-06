@@ -30,6 +30,10 @@ a manual selection replaces the date range). Summary cards and all tables recomp
 the selected scope: added/removed/growth/churn, modifications (commits with any change),
 modification frequency (modifications ÷ |H|), churn rate (churn ÷ |H|) and per-author
 ownership (author churn ÷ total churn).
+Three charts visualise the current scope: **line changes per commit** (stacked added/
+removed areas with the running growth), **author ownership** (churn per author, top 12)
+and **directory volatility** (stacked added/removed per child, top 8 — click a bar to
+drill into that child).
 
 ### API
 
@@ -52,6 +56,7 @@ ownership (author churn ÷ total churn).
 - lucide-react — icons
 - sonner — toasts
 - next-themes — light/dark theme
+- recharts — metric visualisations (via the shadcn/ui chart wrapper)
 - better-sqlite3 — embedded SQLite database
 - vitest — test runner
 - class-variance-authority, cn, tw-animate-css — shadcn/ui component helpers

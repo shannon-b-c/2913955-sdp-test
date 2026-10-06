@@ -16,6 +16,11 @@ import {
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { AddRepoDialog } from "@/components/add-repo-dialog";
+import {
+  ActivityChart,
+  ChildrenChart,
+  OwnershipChart,
+} from "@/components/metric-charts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -214,10 +219,14 @@ export default function Dashboard() {
           onValueChange={(v) => setRepoId(v ? Number(v) : null)}
         >
           <SelectTrigger className="w-64">
-            <SelectValue placeholder={repos?.length ? "Choose a repository" : "No repositories yet"}>
+            <SelectValue>
               {(value: string) =>
                 (repos ?? []).find((r) => String(r.id) === value)?.name ??
-                (repos?.length ? "Choose a repository" : "No repositories yet")
+                (repos === null
+                  ? "Loading repositories…"
+                  : repos.length === 0
+                    ? "No repositories yet"
+                    : "Choose a repository")
               }
             </SelectValue>
           </SelectTrigger>
@@ -242,7 +251,9 @@ export default function Dashboard() {
         />
       </div>
 
-      {!repos?.length ? (
+      {repos === null ? (
+        <LoadingState />
+      ) : repos.length === 0 ? (
         <EmptyState />
       ) : selectedRepo && selectedRepo.status !== "ready" ? (
         <IngestStatus repo={selectedRepo} />
@@ -329,6 +340,22 @@ export default function Dashboard() {
 
           {metrics && <SummaryCards m={metrics} />}
 
+          {metrics && metrics.commits.length > 0 && (
+            <Card>
+              <CardContent className="flex flex-col gap-3 px-4 py-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h2 className="text-sm font-medium">Line changes per commit</h2>
+                  <span className="text-muted-foreground text-xs">
+                    {metrics.commitsTruncated
+                      ? `newest ${metrics.commits.length} of the commit set`
+                      : `${metrics.commits.length} commits in set`}
+                  </span>
+                </div>
+                <ActivityChart commits={metrics.commits} />
+              </CardContent>
+            </Card>
+          )}
+
           {metrics && (
             <Tabs defaultValue="directory">
               <TabsList>
@@ -347,49 +374,55 @@ export default function Dashboard() {
                     Nothing measured under this path for the current filters.
                   </p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead className="text-right">Added</TableHead>
-                        <TableHead className="text-right">Removed</TableHead>
-                        <TableHead className="text-right">Growth</TableHead>
-                        <TableHead className="text-right">Churn</TableHead>
-                        <TableHead className="text-right">Modifications</TableHead>
-                        <TableHead className="text-right">Mod frequency</TableHead>
-                        <TableHead className="text-right">Churn rate</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {metrics.children.map((c) => (
-                        <TableRow
-                          key={c.name}
-                          className="cursor-pointer"
-                          onClick={() => setFilters((f) => ({ ...f, path: childPath(c.name) }))}
-                        >
-                          <TableCell>
-                            <span className="flex items-center gap-2">
-                              {c.kind === "dir" ? (
-                                <Folder className="text-muted-foreground size-4" />
-                              ) : (
-                                <File className="text-muted-foreground size-4" />
-                              )}
-                              {c.name}
-                            </span>
-                          </TableCell>
-                          <MetricCells
-                            added={c.added}
-                            removed={c.removed}
-                            growth={c.growth}
-                            churn={c.churn}
-                            modifications={c.modifications}
-                            modificationFrequency={c.modificationFrequency}
-                            churnRate={c.churnRate}
-                          />
+                  <div className="flex flex-col gap-6">
+                    <ChildrenChart
+                      items={metrics.children}
+                      onSelect={(name) => setFilters((f) => ({ ...f, path: childPath(name) }))}
+                    />
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead className="text-right">Added</TableHead>
+                          <TableHead className="text-right">Removed</TableHead>
+                          <TableHead className="text-right">Growth</TableHead>
+                          <TableHead className="text-right">Churn</TableHead>
+                          <TableHead className="text-right">Modifications</TableHead>
+                          <TableHead className="text-right">Mod frequency</TableHead>
+                          <TableHead className="text-right">Churn rate</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {metrics.children.map((c) => (
+                          <TableRow
+                            key={c.name}
+                            className="cursor-pointer"
+                            onClick={() => setFilters((f) => ({ ...f, path: childPath(c.name) }))}
+                          >
+                            <TableCell>
+                              <span className="flex items-center gap-2">
+                                {c.kind === "dir" ? (
+                                  <Folder className="text-muted-foreground size-4" />
+                                ) : (
+                                  <File className="text-muted-foreground size-4" />
+                                )}
+                                {c.name}
+                              </span>
+                            </TableCell>
+                            <MetricCells
+                              added={c.added}
+                              removed={c.removed}
+                              growth={c.growth}
+                              churn={c.churn}
+                              modifications={c.modifications}
+                              modificationFrequency={c.modificationFrequency}
+                              churnRate={c.churnRate}
+                            />
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </TabsContent>
 
@@ -399,33 +432,36 @@ export default function Dashboard() {
                     No author touched this scope in the current commit set.
                   </p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Author</TableHead>
-                        <TableHead className="text-right">Commits touching scope</TableHead>
-                        <TableHead className="text-right">Churn</TableHead>
-                        <TableHead className="text-right">Modifications</TableHead>
-                        <TableHead className="text-right">Ownership</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {metrics.authors.map((a) => (
-                        <TableRow key={a.id}>
-                          <TableCell>
-                            <span className="flex flex-col">
-                              {a.name}
-                              <span className="text-muted-foreground text-xs">{a.email}</span>
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">{fmtInt.format(a.commits)}</TableCell>
-                          <TableCell className="text-right">{fmtInt.format(a.churn)}</TableCell>
-                          <TableCell className="text-right">{fmtInt.format(a.modifications)}</TableCell>
-                          <TableCell className="text-right">{fmtPct(a.ownership)}</TableCell>
+                  <div className="flex flex-col gap-6">
+                    <OwnershipChart authors={metrics.authors} />
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Author</TableHead>
+                          <TableHead className="text-right">Commits touching scope</TableHead>
+                          <TableHead className="text-right">Churn</TableHead>
+                          <TableHead className="text-right">Modifications</TableHead>
+                          <TableHead className="text-right">Ownership</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {metrics.authors.map((a) => (
+                          <TableRow key={a.id}>
+                            <TableCell>
+                              <span className="flex flex-col">
+                                {a.name}
+                                <span className="text-muted-foreground text-xs">{a.email}</span>
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">{fmtInt.format(a.commits)}</TableCell>
+                            <TableCell className="text-right">{fmtInt.format(a.churn)}</TableCell>
+                            <TableCell className="text-right">{fmtInt.format(a.modifications)}</TableCell>
+                            <TableCell className="text-right">{fmtPct(a.ownership)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </TabsContent>
 
@@ -477,7 +513,7 @@ export default function Dashboard() {
           )}
         </>
       ) : (
-        <EmptyState />
+        <NoRepoSelected />
       )}
     </div>
   );
@@ -618,6 +654,29 @@ function EmptyState() {
         <Folder className="size-8 opacity-50" />
         <p>No repositories yet.</p>
         <p>Use “Add repository” to clone a remote URL or upload a zip containing the repo&apos;s .git.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LoadingState() {
+  return (
+    <Card>
+      <CardContent className="text-muted-foreground flex items-center gap-3 py-16 text-sm">
+        <Loader2 className="size-4 animate-spin" />
+        Loading repositories…
+      </CardContent>
+    </Card>
+  );
+}
+
+function NoRepoSelected() {
+  return (
+    <Card>
+      <CardContent className="text-muted-foreground flex flex-col items-center gap-2 py-16 text-sm">
+        <Folder className="size-8 opacity-50" />
+        <p>No repository selected.</p>
+        <p>Pick a repository above to explore its metrics.</p>
       </CardContent>
     </Card>
   );
