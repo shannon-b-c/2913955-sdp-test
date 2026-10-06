@@ -97,5 +97,5 @@ rejects any migration file containing `DELETE` or `DROP`, so migrations only eve
 
 ## AI usage
 
-Code generated with the assistance of Qoder[<mode/model shown in Qoder>]. Transcripts/notes in docs/ai/.
-The preceding document was generated with the assistance of: Qoder[<model>]
+Code generated with the assistance of Qoder[Auto].
+The preceding document was generated with the assistance of: Qoder[Auto]
