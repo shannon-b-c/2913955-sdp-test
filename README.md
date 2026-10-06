@@ -31,8 +31,26 @@ Or: `bash start.sh`
 
 ## Database design    (tables, columns, relationships — must match the schema)
 
-To be documented alongside the schema. Migrations are plain `.sql` files in `/migrations`,
-applied automatically on startup; migrations only ever add.
+SQLite via better-sqlite3. Migrations are plain `.sql` files in `/migrations`, applied
+automatically on startup — each in its own transaction, tracked in `_migrations`; the runner
+rejects any migration file containing `DELETE` or `DROP`, so migrations only ever add.
+
+- **repositories** — one row per ingested repo. `id`, `name`, `source_type` (`zip` | `remote`),
+  `source_url`, `head_hash` (reference commit for the analysis set), `status`
+  (`pending` | `ingesting` | `ready` | `failed`), `error`, `created_at`, `ingested_at`.
+- **authors** — raw git identities per repo. `id`, `repo_id` → repositories, `name`, `email`
+  (unique per repo), `canonical_id` → authors (`NULL` = this row is the canonical identity;
+  `.mailmap` and manual merges resolve through it), `created_at`.
+- **commits** — full history, including merges. `id`, `repo_id`, `hash` (unique per repo),
+  `parent_hash`, `author_id` → authors, `committer_date` (ISO 8601 — all time filtering uses
+  the committer date, half-open `[i, j)` ranges), `summary`, `is_merge` (metric queries only
+  read `is_merge = 0`), `created_at`.
+- **file_stats** — the per-commit, per-file primitive (`git numstat`, 50% rename detection).
+  `id`, `repo_id`, `commit_id` → commits, `path`, `added`, `removed`. Binary files are never
+  recorded; a pure rename is a `0/0` row so the new path stays in scope; a rename+edit lands
+  on the new path; a removal carries its full line count on the old path. Growth =
+  `added − removed`, churn = `added + removed`. Directory and repository metrics aggregate
+  `path` prefixes at query time — there is no directories table.
 
 ## AI usage
 
