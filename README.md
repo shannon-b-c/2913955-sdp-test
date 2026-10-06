@@ -7,6 +7,8 @@ per directory, per commit set, and for the whole repository. Built for COMS3011A
 ## Running it
 
 Node **>= 20.9.0** (developed on v22.23.3, e.g. via `nvm install 22`).
+Also requires the `git` and `unzip` binaries on `PATH` — repository ingestion
+drives them directly (deep clone, numstat analysis, archive extraction).
 From a clean clone:
 
     npm install
@@ -28,6 +30,17 @@ Or: `bash start.sh`
 - better-sqlite3 — embedded SQLite database
 - vitest — test runner
 - class-variance-authority, cn, tw-animate-css — shadcn/ui component helpers
+
+## Ingestion
+
+Two sources: a **zip** that must contain the repo's `.git` (at the archive root or one
+folder down), or a **remote URL** that is deep cloned — full history, no shallow copy.
+Ingestion streams `git log --numstat -z -M50%` once and parses it byte-wise, so huge
+repositories never sit in memory; author names/emails are mailmap-resolved by git itself
+via `%aN`/`%aE`, so a tracked `.mailmap` in the repo merges identities at the source.
+All rows for a repository are written inside a single transaction — a repo shows up
+either fully ingested (`ready`) or not at all (`failed`, with the reason). The cloned or
+extracted checkout is kept under `.data/repos/<repository id>`.
 
 ## Database design    (tables, columns, relationships — must match the schema)
 
